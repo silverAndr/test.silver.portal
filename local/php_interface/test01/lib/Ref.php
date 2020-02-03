@@ -4,10 +4,21 @@ namespace Silver;
 
 
 use Bitrix\Main\Loader;
+use Bitrix\Highloadblock as HL;
 
+/**
+ * Класс облегчает работу с объектами, модели которых храняться в HL блоках
+ * Реализуется:
+ * * перезагрузка свойосвт объекта
+ * * работа с объектом, как с ассоциативным массивом
+ * * Запись логов в журнал битрикс
+ * * Созранение данных в БД
+ * Для создания своих классов-потомков необходима реализация лишь нескольких абстрактных методов
+ * Class Ref
+ * @package Silver
+ */
 abstract class Ref implements \ArrayAccess
 {
-	protected $data;
 	protected $entity;
 	protected $id;
 
@@ -46,6 +57,7 @@ abstract class Ref implements \ArrayAccess
 		return $this->entity::getRowById($this->id); // получаем поля
 	}
 
+
 	/**
 	 * Сохрагяем $message в журнал Битрикс
 	 * @param $message - текст, который надо добавить
@@ -74,7 +86,7 @@ abstract class Ref implements \ArrayAccess
 	 * @param $severity
 	 * @return mixed
 	 */
-	protected abstract function log($message, $severity);
+	protected abstract function log($message, $severity='INFO');
 
 	/**
 	 * Кидает ошибку в журнал
@@ -96,17 +108,29 @@ abstract class Ref implements \ArrayAccess
 	}
 
 	/**
+	 * Удаляет запись из HL блока по ее ID
+	 */
+	public function delete() {
+		HL\HighloadBlockTable::delete($this->id);
+	}
+
+	/**
 	 * Сохранение данных в базу
 	 * @return \Bitrix\Main\ORM\Data\AddResult|\Bitrix\Main\ORM\Data\UpdateResult
 	 * @throws \Exception
 	 */
 	public function save()
 	{
-		if ($this->order_id) {
-			return $this->entity::update($this->order_id, $this->GetParams());
+		if ($this->id) {
+			$result = $this->entity::update($this->id, $this->GetParams());
 		} else {
-			return $this->entity::add($this->GetParams());
+			$result = $this->entity::add($this->GetParams());
 		}
+		if ($arErrors = $result->getErrorMessages()) {
+			$this->error(implode($arErrors));
+		}
+		$this->id = $result->getID();
+		return $result->isSuccess();
 	}
 
 	/**
@@ -181,7 +205,7 @@ abstract class Ref implements \ArrayAccess
 	{
 		$arData = $this->GetParams();
 		$arData[$name] = $value;
-		$this->SetParams($arData);
+		return $this->SetParams($arData);
 	}
 
 	/**
